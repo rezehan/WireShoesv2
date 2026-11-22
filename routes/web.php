@@ -21,6 +21,21 @@ Route::middleware('auth')->group(function () {
     Route::get('/dashboard', [StaffDashboardController::class, 'index'])
         ->name('dashboard');
 
+    $menuStaf = [
+        'pesanan' => '/pesanan',
+        'voucher' => '/voucher',
+        'pelanggan' => '/pelanggan',
+        'layanan' => '/staf/layanan',
+        'tim' => '/tim',
+        'laporan' => '/laporan',
+    ];
+
+    foreach ($menuStaf as $bagian => $url) {
+        Route::get($url, [StaffDashboardController::class, 'index'])
+            ->defaults('bagian', $bagian)
+            ->name('staff.'.$bagian);
+    }
+
     Route::post('/dashboard/{aksi}', [StaffDashboardController::class, 'simpan'])
         ->name('dashboard.simpan');
 

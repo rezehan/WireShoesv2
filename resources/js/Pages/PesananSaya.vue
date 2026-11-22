@@ -24,9 +24,17 @@ const methods = {
     ambil: 'Ambil di toko',
 };
 
+const voucherStatuses = {
+    terbit: ['Terbit', 'bg-emerald-100 text-emerald-800'],
+    terpakai: ['Terpakai', 'bg-indigo-100 text-indigo-800'],
+    kedaluwarsa: ['Kedaluwarsa', 'bg-slate-200 text-slate-700'],
+};
+
 const rupiah = new Intl.NumberFormat('id-ID', {
     style: 'currency',
     currency: 'IDR',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
 });
 
 function petunjuk(order) {
@@ -63,7 +71,8 @@ function petunjuk(order) {
             </Link>
         </header>
 
-        <p v-if="!pesanan.length" class="rounded-2xl border border-slate-200 bg-white p-5 text-slate-600">
+        <p v-if="!pesanan.length"
+            class="rounded-2xl border border-slate-200 bg-white p-5 text-slate-600">
             Belum ada pesanan di halaman ini.
         </p>
 
@@ -129,10 +138,35 @@ function petunjuk(order) {
                     </div>
 
                     <div class="flex justify-between gap-3 font-semibold text-slate-900">
-                        <dt>Total pesanan</dt>
+                        <dt>{{ order.status === 'dipesan' ? 'Estimasi harga' : 'Total pesanan' }}</dt>
                         <dd>{{ rupiah.format(order.total_harga) }}</dd>
                     </div>
                 </dl>
+
+                <section v-if="order.voucher"
+                    class="mt-4 rounded-xl border border-slate-200 bg-white p-4">
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <h3 class="text-sm font-semibold text-slate-900">Voucher kompensasi</h3>
+                            <p class="mt-1 text-lg font-bold text-slate-900">
+                                {{ rupiah.format(order.voucher.nilai) }}
+                            </p>
+                        </div>
+
+                        <span class="rounded-full px-3 py-1 text-xs font-semibold"
+                            :class="voucherStatuses[order.voucher.status][1]">
+                            {{ voucherStatuses[order.voucher.status][0] }}
+                        </span>
+                    </div>
+
+                    <p class="mt-2 text-sm text-slate-600">
+                        Berlaku sampai {{ order.voucher.berlaku_sampai }} WITA.
+                    </p>
+
+                    <p v-if="order.voucher.status === 'terbit'" class="mt-1 text-sm text-slate-600">
+                        Sebutkan nomor pesanan ini kepada staf untuk memakai voucher pada pesanan lain.
+                    </p>
+                </section>
 
                 <p v-if="petunjuk(order)" class="mt-4 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">
                     {{ petunjuk(order) }}

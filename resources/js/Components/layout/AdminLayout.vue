@@ -29,7 +29,7 @@ const icons = {
 
 function searchOrders() {
     const q = query.value.trim();
-    if (q) router.get(route('dashboard'), { bagian: 'pesanan', q });
+    if (q) router.get(route('staff.pesanan'), { q });
 }
 
 function closeProfile() {
@@ -59,7 +59,7 @@ function closeProfile() {
                 <ul class="space-y-1">
                     <li v-for="(label, key) in menu" :key="key">
                         <Link
-                            :href="key === 'ringkasan' ? route('dashboard') : route('dashboard', { bagian: key })"
+                            :href="route(key === 'ringkasan' ? 'dashboard' : `staff.${key}`)"
                             :aria-current="key === bagian ? 'page' : undefined"
                             class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors"
                             :class="key === bagian ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'"

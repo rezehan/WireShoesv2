@@ -22,6 +22,7 @@ use Inertia\Response;
 class StaffDashboardController extends Controller
 {
     private const TZ = 'Asia/Makassar';
+    private const BATAS_VOUCHER_MENIT = 60;
 
     private const MENU = [
         'ringkasan' => 'Ringkasan',
@@ -70,8 +71,12 @@ class StaffDashboardController extends Controller
             'akhir' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:mulai'],
         ]);
 
-        $bagian = $data['bagian'] ?? 'ringkasan';
+        $bagian = $request->route('bagian') ?? ($data['bagian'] ?? 'ringkasan');
         abort_unless(isset($menu[$bagian]), 403);
+
+        if ($request->query->has('bagian')) {
+            return redirect()->route($this->ruteBagian($bagian), $request->except('bagian'));
+        }
 
         $isi = match ($bagian) {
             'ringkasan' => $this->ringkasan($user),
@@ -83,7 +88,9 @@ class StaffDashboardController extends Controller
             'laporan' => $this->laporan($data),
         };
 
-        return Inertia::render('Dashboard', [
+        $page = $bagian === 'pesanan' ? 'PesananStaf' : 'Dashboard';
+
+        return Inertia::render($page, [
             'menu' => $menu,
             'bagian' => $bagian,
             'judul' => $menu[$bagian],
@@ -114,8 +121,16 @@ class StaffDashboardController extends Controller
             default => abort(404),
         };
 
-        return redirect()->route('dashboard', $tujuan)
+        $rute = $this->ruteBagian($tujuan['bagian']);
+        unset($tujuan['bagian']);
+
+        return redirect()->route($rute, $tujuan)
             ->with('dashboard_pesan', 'Data berhasil disimpan.');
+    }
+
+    private function ruteBagian(string $bagian): string
+    {
+        return $bagian === 'ringkasan' ? 'dashboard' : 'staff.'.$bagian;
     }
 
     private function orders(): Builder
@@ -143,12 +158,23 @@ class StaffDashboardController extends Controller
             );
     }
 
+    private function pesananLayakVoucher(): Builder
+    {
+        $selisihDetik = DB::getDriverName() === 'sqlite'
+            ? "strftime('%s', i.siap) - strftime('%s', i.estimasi)"
+            : 'TIMESTAMPDIFF(SECOND, i.estimasi, i.siap)';
+
+        return $this->orders()
+            ->where('o.status', Order::STATUS_SELESAI)
+            ->whereRaw("($selisihDetik) >= ?", [self::BATAS_VOUCHER_MENIT * 60]);
+    }
+
     private function ringkasan(User $user): array
     {
         $hariIni = CarbonImmutable::today(self::TZ);
         $aktif = $this->orders()->whereIn('o.status', ['dipesan', 'diproses']);
 
-        $perluDitangani = (clone $aktif)->where(fn (Builder $q) => $q
+        $perluDitangani = (clone $aktif)->where(fn(Builder $q) => $q
             ->where('o.status', 'dipesan')
             ->orWhere('i.estimasi', '<', $this->waktuSimpan($hariIni->addDay())));
 
@@ -160,9 +186,7 @@ class StaffDashboardController extends Controller
         ];
 
         if ($user->isAdmin()) {
-            $cards['Voucher perlu diterbitkan'] = $this->orders()
-                ->where('o.status', 'selesai')
-                ->whereColumn('i.siap', '>', 'i.estimasi')
+            $cards['Voucher perlu diterbitkan'] = $this->pesananLayakVoucher()
                 ->whereNull('v.id')
                 ->count();
         }
@@ -216,8 +240,8 @@ class StaffDashboardController extends Controller
     private function formPesananToko(): array
     {
         $layanan = Service::aktif()->orderBy('nama')->get()->mapWithKeys(
-            fn (Service $service) => [
-                $service->id => $service->nama.' · mulai '.$this->rupiah($service->hargaMinimum()),
+            fn(Service $service) => [
+                $service->id => $service->nama . ' · mulai ' . $this->rupiah($service->hargaMinimum()),
             ],
         )->all();
 
@@ -249,7 +273,7 @@ class StaffDashboardController extends Controller
                 'nama' => $data['nama'],
                 'no_telepon' => $data['no_telepon'],
             ], [
-                'kode_unik' => 'CST'.Str::upper(Str::random(9)),
+                'kode_unik' => 'CST' . Str::upper(Str::random(9)),
                 'alamat' => $data['alamat'] ?? null,
             ]);
 
@@ -296,8 +320,8 @@ class StaffDashboardController extends Controller
         $sumber = $data['sumber'] ?? '';
 
         $orders = $this->orders()
-            ->when($q !== '', fn (Builder $rows) => $rows->where('o.nomor_pesanan', $q))
-            ->when($sumber !== '', fn (Builder $rows) => $rows->where('o.sumber', $sumber))
+            ->when($q !== '', fn(Builder $rows) => $rows->where('o.nomor_pesanan', $q))
+            ->when($sumber !== '', fn(Builder $rows) => $rows->where('o.sumber', $sumber))
             ->orderByDesc('o.tanggal_masuk')
             ->orderByDesc('o.id');
 
@@ -347,7 +371,7 @@ class StaffDashboardController extends Controller
             'forms' => $tab === 'hari_ini' ? [$this->formPesananToko()] : [],
             ...$this->daftarPesanan(
                 $orders->paginate(15),
-                array_filter($context, fn ($value) => $value !== ''),
+                array_filter($context, fn($value) => $value !== ''),
             ),
         ];
     }
@@ -357,7 +381,7 @@ class StaffDashboardController extends Controller
         return $this->tabel(
             ['Nomor pesanan', 'Pelanggan', 'Sumber', 'Status', 'Estimasi (WITA)', 'Terlambat'],
             $orders,
-            fn ($o) => [
+            fn($o) => [
                 'nilai' => [
                     $o->nomor_pesanan,
                     $o->nama_pemesan ?: $o->nama_pelanggan,
@@ -366,7 +390,7 @@ class StaffDashboardController extends Controller
                     $this->waktu($o->estimasi),
                     $this->durasi($o),
                 ],
-                'url' => route('dashboard', ['bagian' => 'pesanan', 'id' => $o->id, ...$context]),
+                'url' => route('staff.pesanan', ['id' => $o->id, ...$context]),
             ],
         );
     }
@@ -400,9 +424,9 @@ class StaffDashboardController extends Controller
                 ...($baru ? [
                     $this->field('estimasi_selesai', 'Estimasi selesai (WITA)', $saranEstimasi, 'datetime-local'),
                 ] : []),
-                ...($baru ? $pesanan->items->map(fn ($item) => $this->field(
-                    'harga_item_'.$item->id,
-                    'Harga final '.$item->service->nama.' (min. '.$this->rupiah($item->service->hargaMinimum()).')',
+                ...($baru ? $pesanan->items->map(fn($item) => $this->field(
+                    'harga_item_' . $item->id,
+                    'Harga final ' . $item->service->nama . ' (min. ' . $this->rupiah($item->service->hargaMinimum()) . ')',
                     max((float) $item->harga, $item->service->hargaMinimum()),
                     'number',
                 ))->all() : []),
@@ -441,7 +465,7 @@ class StaffDashboardController extends Controller
 
         $tanggal = $this->lokal($o->tanggal_masuk)->toDateString();
         $hariIni = CarbonImmutable::today(self::TZ)->toDateString();
-        $kembali = ['bagian' => 'pesanan', ...array_intersect_key($data, array_flip(['q', 'sumber']))];
+        $kembali = array_intersect_key($data, array_flip(['q', 'sumber']));
 
         if ($tanggal < $hariIni) {
             $kembali += [
@@ -452,7 +476,7 @@ class StaffDashboardController extends Controller
         }
 
         return [
-            'urlKembali' => route('dashboard', $kembali),
+            'urlKembali' => route('staff.pesanan', $kembali),
             'detail' => [
                 'Nomor pesanan' => $o->nomor_pesanan,
                 'Pelanggan' => $o->nama_pemesan ?: $o->nama_pelanggan,
@@ -473,7 +497,7 @@ class StaffDashboardController extends Controller
                 'Aktual diambil (WITA)' => $this->waktu($o->diambil_pada),
                 'Voucher kompensasi' => $user->isAdmin() ? $voucher : ($o->voucher_id ? 'Sudah diterbitkan' : '—'),
                 ($baru ? 'Estimasi harga' : 'Total setelah potongan voucher') =>
-                    $this->rupiah(max(0, $pesanan->total_harga - ($o->potongan_voucher ?? 0))),
+                $this->rupiah(max(0, $pesanan->total_harga - ($o->potongan_voucher ?? 0))),
             ],
             'forms' => $forms,
         ];
@@ -577,19 +601,19 @@ class StaffDashboardController extends Controller
                     $pesan = [];
 
                     foreach ($items as $item) {
-                        $field = 'harga_item_'.$item->id;
+                        $field = 'harga_item_' . $item->id;
                         $minimum = $item->service->hargaMinimum();
 
                         $aturan[$field] = [
                             'required',
                             'numeric',
                             'decimal:0,2',
-                            'min:'.number_format($minimum, 2, '.', ''),
+                            'min:' . number_format($minimum, 2, '.', ''),
                             'max:9999999999.99',
                         ];
 
-                        $pesan[$field.'.required'] = 'Isi harga final.';
-                        $pesan[$field.'.min'] = 'Harga final minimal '.$this->rupiah($minimum).'.';
+                        $pesan[$field . '.required'] = 'Isi harga final.';
+                        $pesan[$field . '.min'] = 'Harga final minimal ' . $this->rupiah($minimum) . '.';
                     }
 
                     $hargaFinal = $request->validate($aturan, $pesan);
@@ -598,7 +622,7 @@ class StaffDashboardController extends Controller
                 foreach ($items as $item) {
                     if ($estimasiSelesai) {
                         $item->estimasi_selesai = $this->waktuSimpan($estimasiSelesai);
-                        $item->harga = $hargaFinal['harga_item_'.$item->id];
+                        $item->harga = $hargaFinal['harga_item_' . $item->id];
                     }
 
                     if ($status === 'selesai' && ! $item->tanggal_selesai) {
@@ -633,9 +657,7 @@ class StaffDashboardController extends Controller
 
     private function voucher(): array
     {
-        $belum = $this->orders()
-            ->where('o.status', 'selesai')
-            ->whereColumn('i.siap', '>', 'i.estimasi')
+        $belum = $this->pesananLayakVoucher()
             ->whereNull('v.id')
             ->orderBy('o.id')
             ->paginate(10, ['*'], 'kompensasi');
@@ -650,7 +672,7 @@ class StaffDashboardController extends Controller
             ...$this->tabel(
                 ['Nomor pesanan', 'Nilai', 'Berlaku sampai (WITA)', 'Status'],
                 $terbit,
-                fn ($v) => $this->row([
+                fn($v) => $this->row([
                     $v->nomor_pesanan,
                     $this->rupiah($v->nilai),
                     $this->waktu($v->berlaku_sampai),
@@ -660,7 +682,7 @@ class StaffDashboardController extends Controller
             'tambahan' => $this->tabel(
                 ['Perlu diterbitkan', 'Keterlambatan'],
                 $belum,
-                fn ($o) => $this->row([$o->nomor_pesanan, $this->durasi($o)], 'pesanan', $o->id),
+                fn($o) => $this->row([$o->nomor_pesanan, $this->durasi($o)], 'pesanan', $o->id),
             ),
             'forms' => [
                 $this->form('Terbitkan voucher', 'terbit', [
@@ -688,7 +710,13 @@ class StaffDashboardController extends Controller
             $order = Order::where('nomor_pesanan', $data['nomor'])->lockForUpdate()->first();
             $this->pastikan((bool) $order, 'nomor', 'Pesanan tidak ditemukan.');
 
-            $o = $this->orders()->where('o.id', $order->id)->first();
+            $o = $this->pesananLayakVoucher()->where('o.id', $order->id)->first();
+
+            $this->pastikan(
+                $o !== null,
+                'nomor',
+                'Pesanan harus selesai dengan keterlambatan minimal ' . self::BATAS_VOUCHER_MENIT . ' menit.',
+            );
 
             $this->pastikan(
                 $o->status === 'selesai' && $o->estimasi && $o->siap && $o->siap > $o->estimasi,
@@ -766,7 +794,7 @@ class StaffDashboardController extends Controller
             return $this->tabel(
                 ['Nama', 'Nomor HP', 'Jumlah pesanan'],
                 $rows,
-                fn ($c) => $this->row([$c->nama, $c->no_telepon, $c->orders_count], 'pelanggan', $c->id),
+                fn($c) => $this->row([$c->nama, $c->no_telepon, $c->orders_count], 'pelanggan', $c->id),
             );
         }
 
@@ -791,7 +819,7 @@ class StaffDashboardController extends Controller
             'tambahan' => $this->tabel(
                 ['Voucher pesanan', 'Nilai', 'Status'],
                 $vouchers,
-                fn ($v) => $this->row([
+                fn($v) => $this->row([
                     $v->nomor_pesanan,
                     $this->rupiah($v->nilai),
                     $this->statusVoucher($v->dipakai_pada, $v->berlaku_sampai),
@@ -808,7 +836,7 @@ class StaffDashboardController extends Controller
             ...$this->tabel(
                 ['Layanan', 'Tarif', 'Estimasi', 'Ketersediaan'],
                 Service::orderBy('nama')->paginate(15),
-                fn ($row) => $this->row([
+                fn($row) => $this->row([
                     $row->nama,
                     $this->rupiah($row->harga),
                     $row->estimasi_hari . ' hari',
@@ -853,7 +881,7 @@ class StaffDashboardController extends Controller
         $this->pastikan(
             (float) $data['harga'] >= $minimum,
             'harga',
-            'Tarif awal minimal '.$this->rupiah($minimum).'.',
+            'Tarif awal minimal ' . $this->rupiah($minimum) . '.',
         );
 
         $s->fill($data)->save();
@@ -883,7 +911,7 @@ class StaffDashboardController extends Controller
                 ...$this->tabel(
                     ['Tanggal', 'Pekerja', 'Status', 'Masuk', 'Pulang', 'Catatan'],
                     $rows,
-                    fn ($r) => $this->row([
+                    fn($r) => $this->row([
                         $r->tanggal,
                         $r->nama,
                         ucfirst($r->status),
@@ -944,11 +972,11 @@ class StaffDashboardController extends Controller
             ...$this->tabel(
                 ['Pekerja', 'Jabatan'],
                 $team->orderBy('nama')->orderBy('id')->paginate(15),
-                fn ($s) => $this->row([$s->nama, ucfirst($s->jabatan)], $s->user_id ? null : 'tim', $s->id, 'akun'),
+                fn($s) => $this->row([$s->nama, ucfirst($s->jabatan)], $s->user_id ? null : 'tim', $s->id, 'akun'),
             ),
             'tambahan' => [
                 'kolom' => ['Akun Firebase', 'Email', 'Hak akses'],
-                'baris' => $akun->map(fn ($u) => $this->row([$u->name, $u->email, ucfirst($u->role)])),
+                'baris' => $akun->map(fn($u) => $this->row([$u->name, $u->email, ucfirst($u->role)])),
             ],
             'forms' => [
                 $this->form($pekerja ? 'Edit nama pekerja' : 'Tambah teknisi atau kurir', 'pekerja', [
@@ -1102,7 +1130,7 @@ class StaffDashboardController extends Controller
 
         $from = $this->waktuSimpan(CarbonImmutable::parse($mulai, self::TZ));
         $until = $this->waktuSimpan(CarbonImmutable::parse($akhir, self::TZ)->addDay());
-        $periode = fn (Builder $q, string $kolom) => $q->where($kolom, '>=', $from)->where($kolom, '<', $until);
+        $periode = fn(Builder $q, string $kolom) => $q->where($kolom, '>=', $from)->where($kolom, '<', $until);
 
         $cards = [];
         $tabel = [];
@@ -1155,7 +1183,7 @@ class StaffDashboardController extends Controller
             $tabel = $this->tabel(
                 [ucfirst($tab), 'Selesai', 'Tepat waktu', 'Terlambat', 'Tanpa estimasi'],
                 $q->paginate(15),
-                fn ($s) => $this->row([$s->nama, $s->total, $s->tepat, $s->telat, $s->total - $s->tepat - $s->telat]),
+                fn($s) => $this->row([$s->nama, $s->total, $s->tepat, $s->telat, $s->total - $s->tepat - $s->telat]),
             );
         }
 
@@ -1175,7 +1203,7 @@ class StaffDashboardController extends Controller
             $tabel = $this->tabel(
                 ['Pekerja', 'Jabatan', 'Hadir', 'Izin', 'Sakit', 'Alpa'],
                 $q->paginate(15),
-                fn ($s) => $this->row([$s->nama, ucfirst($s->jabatan), $s->hadir, $s->izin, $s->sakit, $s->alpa]),
+                fn($s) => $this->row([$s->nama, ucfirst($s->jabatan), $s->hadir, $s->izin, $s->sakit, $s->alpa]),
             );
         }
 
@@ -1207,7 +1235,7 @@ class StaffDashboardController extends Controller
     {
         return [
             'nilai' => $nilai,
-            'url' => $bagian ? route('dashboard', array_filter(compact('bagian', 'id', 'tab'))) : null,
+            'url' => $bagian ? route($this->ruteBagian($bagian), array_filter(compact('id', 'tab'))) : null,
         ];
     }
 

@@ -3,6 +3,9 @@ import { computed, defineAsyncComponent } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
 import AdminLayout from '@/Components/layout/AdminLayout.vue';
 import DashboardForm from '@/Components/layout/DashboardForm.vue';
+import DashboardTable from '@/Components/layout/DashboardTable.vue';
+
+defineOptions({ inheritAttrs: false });
 
 const StatisticsChart = defineAsyncComponent(() =>
     import('@/Components/main/dashboard/ecommerce/statistics-chart/StatisticsChart.vue'),
@@ -16,7 +19,6 @@ const props = defineProps({
     tabs: { type: Object, default: null },
     tab: { type: String, default: null },
     detail: { type: Object, default: null },
-    urlKembali: { type: String, default: null },
     cards: { type: Object, default: null },
     kolom: { type: Array, default: () => [] },
     baris: { type: Array, default: () => [] },
@@ -27,22 +29,6 @@ const props = defineProps({
     filters: { type: Array, default: () => [] },
     statistikPesanan: { type: Array, default: () => [] },
 });
-
-const statusColors = {
-    Dipesan: 'bg-indigo-50 text-indigo-700',
-    Diproses: 'bg-amber-50 text-amber-800',
-    Selesai: 'bg-emerald-50 text-emerald-800',
-    Dibatalkan: 'bg-red-50 text-red-700',
-    Terbit: 'bg-emerald-50 text-emerald-800',
-    Terpakai: 'bg-indigo-50 text-indigo-700',
-    Kedaluwarsa: 'bg-slate-100 text-slate-700',
-    Aktif: 'bg-emerald-50 text-emerald-800',
-    Nonaktif: 'bg-slate-100 text-slate-700',
-    Hadir: 'bg-emerald-50 text-emerald-800',
-    Izin: 'bg-indigo-50 text-indigo-700',
-    Sakit: 'bg-amber-50 text-amber-800',
-    Alpa: 'bg-red-50 text-red-700',
-};
 
 const tables = computed(() => {
     const primaryTitle = {
@@ -66,11 +52,12 @@ const tables = computed(() => {
             next: props.next,
         }] : []),
         ...(props.tambahan ? [{ title: secondaryTitle, ...props.tambahan }] : []),
-    ].map((table) => ({ ...table, hasActions: table.baris.some((row) => row.url) }));
+    ];
 });
 
+const namaRute = computed(() => props.bagian === 'ringkasan' ? 'dashboard' : `staff.${props.bagian}`);
+
 const filterFields = computed(() => [
-    { name: 'bagian', type: 'hidden', value: props.bagian },
     ...(props.tab ? [{ name: 'tab', type: 'hidden', value: props.tab }] : []),
     ...props.filters,
 ]);
@@ -90,23 +77,11 @@ const percent = new Intl.NumberFormat('id-ID', {
 });
 
 function tabUrl(tab) {
-    const fields = props.bagian === 'pesanan' ? ['q', 'sumber'] : ['mulai', 'akhir'];
-
-    if (props.bagian === 'pesanan' && tab === 'riwayat' && props.tab === 'riwayat') {
-        fields.push('mulai', 'akhir');
-    }
-
     const filters = Object.fromEntries(props.filters
-        .filter(({ name }) => fields.includes(name))
+        .filter(({ name }) => ['mulai', 'akhir'].includes(name))
         .map(({ name, value }) => [name, value]));
 
-    return route('dashboard', { bagian: props.bagian, tab, ...filters });
-}
-
-function statusClass(label, value) {
-    return ['Status', 'Ketersediaan'].includes(label)
-        ? statusColors[value] || 'bg-slate-100 text-slate-700'
-        : null;
+    return route(namaRute.value, { tab, ...filters });
 }
 </script>
 
@@ -140,15 +115,10 @@ function statusClass(label, value) {
                 <DashboardForm
                     :key="JSON.stringify(filterFields)"
                     :fields="filterFields"
-                    :url="route('dashboard')"
+                    :url="route(namaRute)"
                     method="get"
                     label="Terapkan filter"
                 />
-
-                <Link v-if="bagian === 'pesanan'" :href="route('dashboard', { bagian, tab })"
-                    class="mt-3 inline-block text-sm font-semibold text-indigo-700 hover:underline">
-                    Reset filter
-                </Link>
             </section>
 
             <div v-if="cards && Object.keys(cards).length" class="grid gap-4"
@@ -202,7 +172,7 @@ function statusClass(label, value) {
             />
 
             <section v-if="detail" class="rounded-2xl border border-slate-200 bg-white p-5">
-                <Link :href="urlKembali || route('dashboard', { bagian })"
+                <Link :href="route(namaRute)"
                     class="mb-4 inline-flex text-sm font-semibold text-indigo-700 hover:underline">
                     ← Kembali ke daftar
                 </Link>
@@ -223,70 +193,22 @@ function statusClass(label, value) {
                 <DashboardForm :fields="form.fields" :url="form.url" />
             </section>
 
-            <section v-for="table in tables" :key="table.kolom.join('|')"
-                class="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-4">
-                    <h2 class="font-semibold">{{ table.title }}</h2>
-
-                    <Link v-if="bagian === 'ringkasan'" :href="route('dashboard', { bagian: 'pesanan' })"
+            <DashboardTable
+                v-for="table in tables"
+                :key="table.kolom.join('|')"
+                :title="table.title"
+                :kolom="table.kolom"
+                :baris="table.baris"
+                :prev="table.prev"
+                :next="table.next"
+            >
+                <template v-if="bagian === 'ringkasan'" #actions>
+                    <Link :href="route('staff.pesanan')"
                         class="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
                         Semua pesanan
                     </Link>
-                </div>
-
-                <div v-if="table.baris.length" class="overflow-x-auto">
-                    <table class="w-full text-left text-sm">
-                        <thead class="bg-slate-50 text-slate-600">
-                            <tr>
-                                <th v-for="label in table.kolom" :key="label" scope="col"
-                                    class="whitespace-nowrap px-5 py-3 text-xs font-semibold">
-                                    {{ label }}
-                                </th>
-                                <th v-if="table.hasActions" scope="col"
-                                    class="px-5 py-3 text-right text-xs font-semibold">
-                                    Aksi
-                                </th>
-                            </tr>
-                        </thead>
-
-                        <tbody class="divide-y divide-slate-100">
-                            <tr v-for="(row, index) in table.baris" :key="row.url ?? index"
-                                class="hover:bg-slate-50/80">
-                                <td v-for="(value, i) in row.nilai" :key="i"
-                                    class="px-5 py-3.5 text-slate-700" :class="{ 'font-semibold': i === 0 }">
-                                    <span v-if="value && statusClass(table.kolom[i], value)"
-                                        class="inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold"
-                                        :class="statusClass(table.kolom[i], value)">
-                                        {{ value }}
-                                    </span>
-                                    <template v-else>{{ value ?? '—' }}</template>
-                                </td>
-
-                                <td v-if="table.hasActions" class="px-5 py-3.5 text-right">
-                                    <Link v-if="row.url" :href="row.url"
-                                        class="whitespace-nowrap font-semibold text-indigo-700 hover:underline">
-                                        Buka →
-                                    </Link>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-
-                <p v-else class="px-5 py-8 text-sm text-slate-600">Belum ada data untuk ditampilkan.</p>
-
-                <nav v-if="table.prev || table.next" aria-label="Halaman data"
-                    class="flex justify-end gap-2 border-t border-slate-100 px-5 py-3 text-sm font-medium text-slate-700">
-                    <Link v-if="table.prev" :href="table.prev"
-                        class="rounded-lg border border-slate-200 px-3 py-1.5 hover:bg-slate-50">
-                        Sebelumnya
-                    </Link>
-                    <Link v-if="table.next" :href="table.next"
-                        class="rounded-lg border border-slate-200 px-3 py-1.5 hover:bg-slate-50">
-                        Berikutnya
-                    </Link>
-                </nav>
-            </section>
+                </template>
+            </DashboardTable>
         </div>
     </AdminLayout>
 </template>

@@ -17,8 +17,15 @@ class CustomerOrderController extends Controller
         abort_unless($user->isPelanggan(), 403);
 
         $orders = Order::query()
+            ->leftJoin('vouchers as voucher_asal', 'voucher_asal.order_id', '=', 'orders.id')
             ->leftJoin('vouchers as potongan', 'potongan.dipakai_di_order_id', '=', 'orders.id')
-            ->select('orders.*', 'potongan.nilai as potongan_voucher')
+            ->select(
+                'orders.*',
+                'voucher_asal.nilai as voucher_nilai',
+                'voucher_asal.berlaku_sampai as voucher_berlaku_sampai',
+                'voucher_asal.dipakai_pada as voucher_dipakai_pada',
+                'potongan.nilai as potongan_voucher',
+            )
             ->whereHas('customer', fn ($query) => $query->where('user_id', $user->id))
             ->with('items.service:id,nama')
             ->orderByDesc('orders.tanggal_masuk')
@@ -41,6 +48,7 @@ class CustomerOrderController extends Controller
                 'status' => $order->status,
                 'subtotal' => $subtotal,
                 'potongan_voucher' => $potongan,
+                'voucher' => $this->voucherDiterbitkan($order),
                 'total_harga' => max(0, $subtotal - $potongan),
                 'dipesan' => $this->waktu($order->tanggal_masuk),
                 'diterima' => $this->waktu($order->diterima_pada),
@@ -57,6 +65,25 @@ class CustomerOrderController extends Controller
             'prev' => $orders->previousPageUrl(),
             'next' => $orders->nextPageUrl(),
         ]);
+    }
+
+    private function voucherDiterbitkan(Order $order): ?array
+    {
+        if ($order->voucher_nilai === null) {
+            return null;
+        }
+
+        $batas = CarbonImmutable::parse($order->voucher_berlaku_sampai, config('app.timezone'));
+
+        return [
+            'nilai' => (int) $order->voucher_nilai,
+            'berlaku_sampai' => $this->waktu($batas),
+            'status' => match (true) {
+                $order->voucher_dipakai_pada !== null => 'terpakai',
+                $batas->lessThanOrEqualTo(now()) => 'kedaluwarsa',
+                default => 'terbit',
+            },
+        ];
     }
 
     private function waktu(DateTimeInterface|string|null $value): ?string
