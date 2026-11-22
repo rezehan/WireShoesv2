@@ -1,78 +1,122 @@
-# WireShoes dengan Firebase Authentication
+# WireShoes
 
-Laravel menerima form Inertia, mengirim kredensial ke Firebase untuk login, memvalidasi ID token yang diterima, lalu membuka sesi Laravel. Role `admin`, `kasir`, dan `pelanggan` berasal dari tabel `users`. Pendaftaran lewat situs selalu membuat role `pelanggan`.
+WireShoes adalah aplikasi operasional toko cuci dan reparasi sepatu. Pelanggan dapat membuat pesanan online dan memantau statusnya. Kasir mencatat pesanan yang masuk di toko, menerima pesanan, dan menetapkan harga final setelah memeriksa kondisi sepatu.
 
-Pelanggan yang belum verifikasi tetap bisa masuk dan membuka beranda. Saat membuka layanan, Laravel mengarahkannya ke halaman verifikasi. Permintaan membuat pesanan juga diperiksa di server. Setelah membuka tautan dari Firebase, kembali ke WireShoes dan klik **Cek status verifikasi**. Status juga diperbarui saat login berikutnya.
+Aplikasi menggunakan **Laravel 13**, **Inertia.js 2**, **Vue 3**, **Tailwind CSS 4**, dan **Vite**. Firebase Authentication menangani login, verifikasi email, dan reset kata sandi. Laravel menyimpan sesi aplikasi, hak akses, dan data operasional.
 
-## Salin file
+## Fitur dan hak akses
 
-1. Ekstrak ZIP. Untuk setiap file di folder `copas/`, buka file tersebut dan salin seluruh isinya. Tempel ke path yang sama di proyek WireShoes. Contoh, salin `copas/routes/auth.php` ke `routes/auth.php`. Buat file atau folder tujuan jika belum ada.
-2. `copas/.env.example` adalah contoh konfigurasi. Tambahkan dua variabel Firebase di bawah ke `.env` yang sudah dipakai proyek. Pertahankan nilai `APP_KEY` dan pengaturan database yang sudah berfungsi.
-3. File di `copas/tests/` memperbarui pengujian bawaan. Salin file tersebut juga jika kamu menjalankan `php artisan test`.
+| Role | Fitur |
+| --- | --- |
+| **Pelanggan** | Pesan layanan secara online, lihat estimasi dan harga final, pantau status pesanan, dan cek jadwal pengambilan atau pengantaran di **Pesanan Saya**. |
+| **Kasir** | Akses **Ringkasan** dan **Pesanan**. Buat pesanan toko, terima pesanan, tentukan estimasi dan harga final per item, tugaskan teknisi atau kurir, serta catat serah terima. |
+| **Admin** | Akses semua fitur kasir, kelola layanan, data pelanggan, voucher kompensasi, tim dan absensi, serta laporan operasional. |
 
-## Siapkan Firebase
+### Alur pesanan
 
-Aktifkan provider **Email/Password** di Firebase Console pada menu **Authentication → Sign-in method**. Ambil `apiKey` dari konfigurasi aplikasi Web di **Project settings → General**. Service account JSON harus berasal dari proyek Firebase yang sama.
+1. Pelanggan membuat pesanan online melalui **Layanan**, atau kasir mencatatnya melalui **Pesanan → Hari Ini → Buat pesanan toko**. Sistem menerbitkan nomor pesanan 8 digit.
+2. Kasir membuka detail pesanan dan mengisi **Harga final**, estimasi selesai, serta metode serah terima **Ambil di toko** atau **Diantar kurir**. Pesanan berstatus **Diproses** setelah diterima.
+3. Saat pengerjaan selesai, kasir memperbarui status menjadi **Selesai**, lalu mencatat waktu pengambilan atau pengantaran. Pelanggan online dapat mengikuti pembaruan di **Pesanan Saya**.
 
-Arsip sumber berisi private key service account. Buat kunci pengganti, pasang kunci baru pada server, lalu cabut kunci lama di Google Cloud IAM. Simpan kunci baru di luar repositori. Jika file lama sudah di-track Git, setelah rotasi gunakan `git rm --cached -- <path-file-json>` untuk mengeluarkannya dari indeks Git. Untuk cara menangani kunci yang sudah dibagikan, lihat [panduan Google Cloud](https://docs.cloud.google.com/iam/docs/best-practices-for-managing-service-account-keys).
+Tab **Hari Ini** dan **Riwayat Pesanan** memakai tanggal masuk dalam WITA. Riwayat dapat difilter berdasarkan rentang tanggal, nomor pesanan, dan sumber pesanan. Ringkasan menampilkan grafik pesanan 7 hari terakhir dari kanal Online dan Toko.
 
-Isi `.env` di root proyek. Contoh path Windows menggunakan garis miring ke depan.
+### Tarif awal layanan
+
+| Layanan | Tarif awal |
+| --- | ---: |
+| Cuci | Rp20.000 |
+| Reparasi | Rp35.000 |
+| Cuci dan Reparasi | Rp50.000 |
+
+Tarif awal tampil saat pelanggan memilih layanan. Kasir menentukan harga final setiap item sesuai kondisi sepatu dan batas minimum layanan. Sistem menyimpan harga per item pada pesanan.
+
+### Voucher kompensasi
+
+Pesanan yang selesai melewati estimasi masuk ke antrean **Perlu diterbitkan**. Admin menerbitkan voucher dengan nominal dan masa berlaku yang ditentukan saat penerbitan. Voucher yang berstatus **Terbit** dapat dipakai sekali pada pesanan lain milik pelanggan yang sama, setelah pengerjaan selesai dan sebelum serah terima. Total yang sudah dipotong tampil pada pesanan yang menggunakan voucher.
+
+## Prasyarat
+
+- PHP 8.3–8.5 dan Composer 2.
+- Node.js 22.12 atau lebih baru dan npm.
+- SQLite dengan ekstensi PHP `pdo_sqlite`, atau MySQL 8.0.16 atau lebih baru dengan `pdo_mysql`.
+- Proyek Firebase dengan provider **Email/Password** aktif, API key aplikasi Web, dan service account JSON untuk server.
+
+## Menjalankan proyek secara lokal
+
+Jalankan perintah dari root repositori.
+
+### 1. Pasang dependensi dan siapkan konfigurasi
+
+```bash
+composer install
+npm ci
+```
+
+Untuk instalasi baru, buat `.env` dan kunci aplikasi.
+
+```bash
+cp .env.example .env
+php artisan key:generate
+```
+
+### 2. Konfigurasi database dan Firebase
+
+Contoh konfigurasi lokal dengan SQLite. Buat file database dengan `touch database/database.sqlite`, lalu sesuaikan path absolutnya di `.env`.
 
 ```dotenv
-FIREBASE_API_KEY=
-FIREBASE_CREDENTIALS="C:/path/ke/kunci-baru.json"
+APP_NAME=WireShoes
+APP_URL=http://localhost:8000
+
+DB_CONNECTION=sqlite
+DB_DATABASE=/path/ke/WireShoes/database/database.sqlite
+
+FIREBASE_API_KEY=isi_api_key_aplikasi_web
+FIREBASE_CREDENTIALS="/path/di-luar-repositori/firebase-service-account.json"
 ```
 
-Verifikasi dan reset password membuka halaman tindakan email bawaan Firebase. Bila proyek Firebase memakai URL tindakan email khusus, pastikan URL tersebut menangani kode tindakan Firebase. Pengiriman ulang verifikasi memakai SDK di server.
+Untuk MySQL, buat database terlebih dahulu lalu gunakan `DB_CONNECTION=mysql` dan isi `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, serta `DB_PASSWORD`.
 
-## Jalankan proyek
+Ambil API key dari konfigurasi aplikasi Web di pengaturan proyek Firebase. Gunakan service account dari proyek Firebase yang sama. Simpan `.env` dan service account JSON sebagai konfigurasi lokal di luar GitHub.
 
-Jalankan dari root proyek. Jika satu instalasi dependensi sudah lengkap, kamu bisa melewati perintah instalasinya.
+### 3. Buat tabel dan isi data awal
 
-```sh
-composer install
-npm install
-php artisan optimize:clear
+```bash
 php artisan migrate
 php artisan db:seed --class=WireShoesOrderStatusSeeder
+php artisan db:seed --class=WireShoesTarifAwalSeeder
+```
+
+`WireShoesTarifAwalSeeder` menetapkan tarif katalog ketiga layanan sesuai tabel di atas.
+
+### 4. Jalankan Laravel dan Vite
+
+Di terminal pertama, jalankan `php artisan serve`. Di terminal kedua, jalankan `npm run dev`. Buka [http://localhost:8000](http://localhost:8000). Untuk membangun aset statis, jalankan `npm run build`.
+
+## Menyiapkan akun
+
+**Pelanggan** mendaftar dari situs, membuka tautan verifikasi yang dikirim Firebase, lalu kembali ke WireShoes dan klik **Cek status verifikasi**. Email terverifikasi diperlukan untuk membuat pesanan dan membuka **Pesanan Saya**.
+
+**Admin dan kasir** dibuat terlebih dahulu di Firebase Authentication. Jalankan perintah berikut dengan email akun masing-masing untuk menautkannya ke Laravel.
+
+```bash
+php artisan firebase:link-user admin@example.com --role=admin
+php artisan firebase:link-user kasir@example.com --role=kasir
+```
+
+Untuk akun Laravel yang sudah ada dan ingin mempertahankan role-nya, jalankan perintah tanpa `--role`. Staf dapat membuka `/dashboard` setelah login dan verifikasi email.
+
+## Rute utama
+
+| Rute | Keterangan |
+| --- | --- |
+| `/` | Beranda WireShoes |
+| `/layanan` | Form pesanan online |
+| `/pesanan-saya` | Status, harga, dan serah terima pesanan pelanggan |
+| `/dashboard` | Dashboard admin dan kasir |
+
+## Pengujian
+
+```bash
+php artisan test
 npm run build
-php artisan serve
 ```
-
-Jika proyek baru dan `APP_KEY` kosong, jalankan `php artisan key:generate` sebelum menjalankan server. Jika memakai SQLite baru, buat file SQLite kosong sebelum `migrate`, aktifkan ekstensi PHP `pdo_sqlite`, dan isi `DB_DATABASE` dengan path absolut. Untuk SQLite yang sudah berisi data, pakai path file database lama. Paket ini menyesuaikan migrasi awal tabel `orders` agar validasi kode pelacakan dapat dijalankan di SQLite.
-
-Perintah seeder membuat status awal **Dipesan** jika tabel status masih kosong. Form pesanan menampilkan layanan aktif dari tabel `services` dan memakai harga yang tercatat di database. Jika tabelnya masih kosong, masukkan layanan beserta harga toko. Contoh melalui `php artisan tinker`, sesuaikan nama dan harga sebelum menjalankan.
-
-```php
-App\Models\Service::firstOrCreate(
-    ['nama' => 'Cuci Sepatu'],
-    ['harga' => 25000, 'estimasi_hari' => 3, 'aktif' => true],
-);
-```
-
-## Hubungkan akun staf dan akun Laravel lama
-
-Buat atau impor akun di **Firebase Authentication → Users** terlebih dahulu. Cocokkan email dan pastikan akun Firebase tersebut benar-benar milik orang yang akan diberi akses.
-
-Untuk admin atau kasir yang sudah ada di database Laravel, jalankan perintah berikut dengan email akun tersebut. Perintah mempertahankan ID dan role lokal. Cara ini juga berlaku untuk pelanggan lama.
-
-```sh
-php artisan firebase:link-user admin@example.com
-```
-
-Untuk menambahkan staf baru yang sudah ada di Firebase, gunakan `--role` dari terminal Laravel.
-
-```sh
-php artisan firebase:link-user admin-baru@example.com --role=admin --name="Admin Toko"
-php artisan firebase:link-user kasir-baru@example.com --role=kasir --name="Kasir Toko"
-```
-
-Akun lama memakai password Firebase setelah ditautkan. Jika akunnya dibuat baru di Firebase, pengguna dapat mengatur password sendiri lewat **Lupa password?**. Sesi dari login lokal lama meminta pengguna masuk kembali. Dashboard staf memakai pemeriksaan email terverifikasi yang sudah dipakai proyek.
-
-## Cek setelah konfigurasi
-
-1. Daftar sebagai pelanggan, masuk, lalu buka **Layanan** sebelum verifikasi. WireShoes mengarahkan ke verifikasi email.
-2. Klik tautan Firebase dari email, kembali ke WireShoes, lalu klik **Cek status verifikasi**. Kirim pesanan dan periksa bahwa nomor pesanan muncul.
-3. Masuk dengan akun kasir atau admin yang sudah ditautkan. Periksa bahwa dashboard terbuka dan role di database sesuai. Uji juga **Lupa password?** dengan akun percobaan.
-
-Build Vite dan pengujian Laravel memakai SQLite sudah lulus. Pengujian lokal memakai respons Firebase simulasi. Pengiriman email dan login ke proyek Firebase asli perlu diperiksa setelah kamu memasang konfigurasi baru.
