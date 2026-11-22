@@ -2,57 +2,63 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Models\Order;
+use App\Models\Service;
 use App\Models\User;
-use Illuminate\Auth\Events\Verified;
+use App\Models\WorkStatus;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Event;
-use Illuminate\Support\Facades\URL;
 use Tests\TestCase;
 
 class EmailVerificationTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_email_verification_screen_can_be_rendered(): void
+    public function test_unverified_customer_can_see_home_but_cannot_submit_an_order(): void
     {
-        $user = User::factory()->unverified()->create();
+        $user = User::factory()->unverified()->create(['firebase_uid' => 'customer-1']);
+        $this->withoutVite()->actingAsFirebase($user);
 
-        $response = $this->actingAs($user)->get('/verify-email');
-
-        $response->assertStatus(200);
+        $this->get('/')->assertOk();
+        $this->get('/layanan')->assertRedirect('/verify-email');
+        $this->get('/verify-email')->assertOk();
+        $this->postJson('/layanan/pesanan', [])->assertForbidden();
+        $this->assertDatabaseCount('orders', 0);
     }
 
-    public function test_email_can_be_verified(): void
+    public function test_verifying_with_firebase_allows_customer_to_create_order(): void
     {
-        $user = User::factory()->unverified()->create();
+        $user = User::factory()->unverified()->create(['firebase_uid' => 'customer-1']);
+        $service = Service::create(['nama' => 'Cuci Sepatu', 'harga' => '24000', 'aktif' => true]);
+        $status = WorkStatus::create(['nama' => 'Dipesan', 'urutan' => 1]);
+        $this->fakeFirebaseAdmin()->shouldReceive('getUser')->once()->with('customer-1')
+            ->andReturn($this->firebaseRecord('customer-1', $user->email, true));
 
-        Event::fake();
-
-        $verificationUrl = URL::temporarySignedRoute(
-            'verification.verify',
-            now()->addMinutes(60),
-            ['id' => $user->id, 'hash' => sha1($user->email)]
-        );
-
-        $response = $this->actingAs($user)->get($verificationUrl);
-
-        Event::assertDispatched(Verified::class);
+        $this->actingAsFirebase($user)->post('/email/verification-refresh')->assertRedirect('/');
         $this->assertTrue($user->fresh()->hasVerifiedEmail());
-        $response->assertRedirect(route('dashboard', absolute: false).'?verified=1');
+
+        $this->post('/layanan/pesanan', [
+            'nama' => 'Test Customer',
+            'alamat' => 'Jalan Test',
+            'no_telepon' => '0812345678',
+            'service_id' => $service->id,
+            'harga' => 1,
+        ])->assertRedirect('/layanan');
+
+        $order = Order::sole();
+        $this->assertSame($user->id, $order->dibuat_oleh);
+        $this->assertSame(Order::STATUS_DIPESAN, $order->status);
+        $this->assertSame('24000.00', $order->items()->sole()->harga);
+        $this->assertDatabaseHas('order_item_status_logs', ['status_id' => $status->id]);
     }
 
-    public function test_email_is_not_verified_with_invalid_hash(): void
+    public function test_refresh_keeps_account_unverified_until_firebase_confirms_email(): void
     {
-        $user = User::factory()->unverified()->create();
+        $user = User::factory()->unverified()->create(['firebase_uid' => 'customer-1']);
+        $this->fakeFirebaseAdmin()->shouldReceive('getUser')->once()->with('customer-1')
+            ->andReturn($this->firebaseRecord('customer-1', $user->email));
 
-        $verificationUrl = URL::temporarySignedRoute(
-            'verification.verify',
-            now()->addMinutes(60),
-            ['id' => $user->id, 'hash' => sha1('wrong-email')]
-        );
-
-        $this->actingAs($user)->get($verificationUrl);
-
+        $this->actingAsFirebase($user)->from('/verify-email')->post('/email/verification-refresh')
+            ->assertRedirect('/verify-email')->assertSessionHas('status', 'verification-pending');
         $this->assertFalse($user->fresh()->hasVerifiedEmail());
     }
 }

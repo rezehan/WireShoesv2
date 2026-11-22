@@ -3,61 +3,74 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
-use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Services\FirebaseIdentity;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Redirect;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use Throwable;
 
 class ProfileController extends Controller
 {
-    /**
-     * Display the user's profile form.
-     */
-    public function edit(Request $request): Response
+    public function edit(): Response
     {
         return Inertia::render('Profile/Edit', [
-            'mustVerifyEmail' => $request->user() instanceof MustVerifyEmail,
+            'mustVerifyEmail' => true,
             'status' => session('status'),
         ]);
     }
 
-    /**
-     * Update the user's profile information.
-     */
-    public function update(ProfileUpdateRequest $request): RedirectResponse
+    public function update(ProfileUpdateRequest $request, FirebaseIdentity $firebase): RedirectResponse
     {
-        $request->user()->fill($request->validated());
+        $data = $request->validated();
+        $user = $request->user();
+        $email = Str::lower($data['email']);
+        $emailChangeRequested = $email !== $user->email;
 
-        if ($request->user()->isDirty('email')) {
-            $request->user()->email_verified_at = null;
+        if ($emailChangeRequested) {
+            if ($firebase->emailInUse($user, $email)) {
+                throw ValidationException::withMessages(['email' => 'Email sudah dipakai.']);
+            }
+
+            if (empty($data['current_password'])) {
+                throw ValidationException::withMessages(['current_password' => 'Masukkan password sekarang untuk mengganti email.']);
+            }
+
+            $token = $firebase->reauthenticate($user, $data['current_password']);
+            $firebase->sendEmailChange($email, $token);
         }
 
-        $request->user()->save();
+        $user->update(['name' => $data['name']]);
 
-        return Redirect::route('profile.edit');
+        return redirect()->route('profile.edit')->with('status', $emailChangeRequested ? 'email-change-requested' : null);
     }
 
-    /**
-     * Delete the user's account.
-     */
-    public function destroy(Request $request): RedirectResponse
+    public function destroy(Request $request, FirebaseIdentity $firebase): RedirectResponse
     {
-        $request->validate([
-            'password' => ['required', 'current_password'],
-        ]);
-
+        $data = $request->validate(['current_password' => ['required', 'string', 'max:4096']]);
         $user = $request->user();
 
-        Auth::logout();
+        $firebase->reauthenticate($user, $data['current_password']);
 
-        $user->delete();
+        DB::transaction(function () use ($user, $firebase): void {
+            $user->delete();
 
+            try {
+                $firebase->admin()->deleteUser($user->firebase_uid);
+            } catch (Throwable $error) {
+                throw $firebase->unavailable($error);
+            }
+        });
+
+        $user->setRememberToken(null);
+        Auth::guard('web')->logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return Redirect::to('/');
+        return redirect('/');
     }
 }

@@ -3,7 +3,11 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use App\Services\FirebaseIdentity;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 class ProfileTest extends TestCase
@@ -12,88 +16,59 @@ class ProfileTest extends TestCase
 
     public function test_profile_page_is_displayed(): void
     {
-        $user = User::factory()->create();
-
-        $response = $this
-            ->actingAs($user)
-            ->get('/profile');
-
-        $response->assertOk();
+        $user = User::factory()->create(['firebase_uid' => 'customer-1']);
+        $this->withoutVite()->actingAsFirebase($user)->get('/profile')->assertOk();
     }
 
-    public function test_profile_information_can_be_updated(): void
+    public function test_users_can_update_their_name_in_laravel(): void
     {
-        $user = User::factory()->create();
-
-        $response = $this
-            ->actingAs($user)
-            ->patch('/profile', [
-                'name' => 'Test User',
-                'email' => 'test@example.com',
-            ]);
-
-        $response
-            ->assertSessionHasNoErrors()
-            ->assertRedirect('/profile');
-
-        $user->refresh();
-
-        $this->assertSame('Test User', $user->name);
-        $this->assertSame('test@example.com', $user->email);
-        $this->assertNull($user->email_verified_at);
+        $user = User::factory()->create(['firebase_uid' => 'customer-1']);
+        $this->actingAsFirebase($user)->patch('/profile', ['name' => 'Nama baru', 'email' => $user->email])
+            ->assertRedirect('/profile')->assertSessionHasNoErrors();
+        $this->assertSame('Nama baru', $user->fresh()->name);
+        $this->assertTrue($user->fresh()->hasVerifiedEmail());
     }
 
-    public function test_email_verification_status_is_unchanged_when_the_email_address_is_unchanged(): void
+    public function test_email_change_requires_firebase_verification_before_it_is_saved_locally(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->create(['firebase_uid' => 'customer-1']);
+        $this->partialMock(FirebaseIdentity::class)->shouldReceive('reauthenticate')->once()->andReturn('test-token');
+        config(['services.firebase.api_key' => 'test-web-key']);
+        Http::fake(['identitytoolkit.googleapis.com/*' => Http::response([])]);
 
-        $response = $this
-            ->actingAs($user)
-            ->patch('/profile', [
-                'name' => 'Test User',
-                'email' => $user->email,
-            ]);
+        $this->actingAsFirebase($user)->patch('/profile', [
+            'name' => $user->name,
+            'email' => 'baru@example.com',
+            'current_password' => 'firebase-password',
+        ])->assertRedirect('/profile')->assertSessionHas('status', 'email-change-requested');
 
-        $response
-            ->assertSessionHasNoErrors()
-            ->assertRedirect('/profile');
-
-        $this->assertNotNull($user->refresh()->email_verified_at);
+        $this->assertSame($user->email, $user->fresh()->email);
+        Http::assertSent(fn (Request $request) => $request['requestType'] === 'VERIFY_AND_CHANGE_EMAIL'
+            && $request['newEmail'] === 'baru@example.com'
+            && $request['idToken'] === 'test-token');
     }
 
-    public function test_user_can_delete_their_account(): void
+    public function test_users_can_delete_their_account_after_authenticating_again(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->create(['firebase_uid' => 'customer-1']);
+        $this->partialMock(FirebaseIdentity::class)->shouldReceive('reauthenticate')->once()->andReturn('test-token');
+        $this->fakeFirebaseAdmin()->shouldReceive('deleteUser')->once()->with('customer-1');
 
-        $response = $this
-            ->actingAs($user)
-            ->delete('/profile', [
-                'password' => 'password',
-            ]);
-
-        $response
-            ->assertSessionHasNoErrors()
+        $this->actingAsFirebase($user)->delete('/profile', ['current_password' => 'firebase-password'])
             ->assertRedirect('/');
-
         $this->assertGuest();
-        $this->assertNull($user->fresh());
+        $this->assertModelMissing($user);
     }
 
-    public function test_correct_password_must_be_provided_to_delete_account(): void
+    public function test_wrong_password_does_not_delete_account(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->create(['firebase_uid' => 'customer-1']);
+        $this->partialMock(FirebaseIdentity::class)->shouldReceive('reauthenticate')->once()
+            ->andThrow(ValidationException::withMessages(['current_password' => 'Email atau password salah.']));
+        $this->fakeFirebaseAdmin()->shouldNotReceive('deleteUser');
 
-        $response = $this
-            ->actingAs($user)
-            ->from('/profile')
-            ->delete('/profile', [
-                'password' => 'wrong-password',
-            ]);
-
-        $response
-            ->assertSessionHasErrors('password')
-            ->assertRedirect('/profile');
-
-        $this->assertNotNull($user->fresh());
+        $this->actingAsFirebase($user)->from('/profile')->delete('/profile', ['current_password' => 'wrong'])
+            ->assertRedirect('/profile')->assertSessionHasErrors('current_password');
+        $this->assertModelExists($user);
     }
 }

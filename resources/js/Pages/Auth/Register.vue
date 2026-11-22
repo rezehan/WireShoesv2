@@ -3,6 +3,7 @@ import { Head, Link, useForm } from '@inertiajs/vue3';
 import AuthLayout from '@/Layouts/AuthLayout.vue';
 import BaseInput from '@/Components/ui/BaseInput.vue';
 import BaseButton from '@/Components/ui/BaseButton.vue';
+import BaseAlert from '@/Components/ui/BaseAlert.vue';
 
 const form = useForm({
     nama_lengkap: '',
@@ -14,7 +15,7 @@ const form = useForm({
 });
 
 const submit = () => {
-    form.post(route('register'), {
+    form.transform(data => ({ ...data, email: data.email.trim().toLowerCase() })).post(route('register'), {
         onFinish: () => form.reset('password', 'password_confirmation'),
     });
 };
@@ -38,6 +39,8 @@ const submit = () => {
                     Daftar untuk memesan dan memantau layanan sepatumu.
                 </p>
             </header>
+
+            <BaseAlert v-if="form.errors.firebase">{{ form.errors.firebase }}</BaseAlert>
 
             <BaseInput
                 v-model="form.nama_lengkap"

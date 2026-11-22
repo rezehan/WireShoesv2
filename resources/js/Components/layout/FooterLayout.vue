@@ -1,12 +1,18 @@
+<script setup>
+import { Link, usePage } from '@inertiajs/vue3';
+
+const page = usePage();
+</script>
+
 <template>
     <footer class="w-full bg-red-50/60 border-t border-red-100">
         <div class="container mx-auto px-8 pt-16 pb-8">
             <!-- Atas: logo + kolom tautan -->
             <div class="flex flex-col md:flex-row md:justify-between gap-12 pb-12 border-b border-red-100">
                 <!-- Logo -->
-                <RouterLink :to="{ name: 'beranda' }" class="self-start md:self-center">
+                <Link href="/" class="self-start md:self-center">
                     <img src="../../assets/WIRESHOES.png" alt="WIRESHOES" class="w-40">
-                </RouterLink>
+                </Link>
 
                 <!-- Kolom tautan -->
                 <div class="grid grid-cols-2 md:grid-cols-3 gap-10 md:gap-16">
@@ -14,18 +20,18 @@
                     <div>
                         <h5 class="font-poppins font-bold text-red-900 mb-4">Navigasi</h5>
                         <ul class="space-y-3 text-slate-500">
-                            <li><RouterLink :to="{ name: 'beranda' }" class="transition hover:text-red-700">Beranda</RouterLink></li>
-                            <li><RouterLink :to="{ name: 'beranda', hash: '#how-it-works' }" class="transition hover:text-red-700">Alur Layanan</RouterLink></li>
-                            <li><RouterLink :to="{ name: 'beranda', hash: '#features' }" class="transition hover:text-red-700">Fitur</RouterLink></li>
+                            <li><Link href="/" class="transition hover:text-red-700">Beranda</Link></li>
+                            <li><Link href="/#how-it-works" class="transition hover:text-red-700">Alur Layanan</Link></li>
+                            <li><Link href="/#features" class="transition hover:text-red-700">Fitur</Link></li>
                         </ul>
                     </div>
 
                     <!-- Akun -->
-                    <div>
+                    <div v-if="!page.props.auth.user">
                         <h5 class="font-poppins font-bold text-red-900 mb-4">Akun</h5>
                         <ul class="space-y-3 text-slate-500">
-                            <li><RouterLink :to="{ name: 'masuk' }" class="transition hover:text-red-700">Masuk</RouterLink></li>
-                            <li><RouterLink :to="{ name: 'daftar' }" class="transition hover:text-red-700">Daftar</RouterLink></li>
+                            <li><Link :href="route('login')" class="transition hover:text-red-700">Masuk</Link></li>
+                            <li><Link :href="route('register')" class="transition hover:text-red-700">Daftar</Link></li>
                         </ul>
                     </div>
 

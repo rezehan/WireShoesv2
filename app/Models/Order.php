@@ -5,10 +5,37 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Order extends Model
 {
+    public static function buatDenganNomorUnik(Customer $customer, array $attributes): self
+    {
+        for ($attempt = 0; $attempt < 5; $attempt++) {
+            try {
+                return DB::transaction(fn() => $customer->orders()->create([
+                    ...$attributes,
+                    'nomor_pesanan' => (string) random_int(10_000_000, 99_999_999),
+                ]));
+            } catch (UniqueConstraintViolationException $error) {
+                $detail = (string) ($error->errorInfo[2] ?? '');
+
+                if (
+                    ! str_contains($detail, 'uq_orders_nomor_pesanan')
+                    && ! str_contains($detail, 'orders.nomor_pesanan')
+                ) {
+                    throw $error;
+                }
+            }
+        }
+
+        throw ValidationException::withMessages([
+            'service_id' => 'Nomor pesanan belum berhasil dibuat. Coba lagi.',
+        ]);
+    }
     protected $table = 'orders';
 
     public const SUMBER_TOKO = 'toko';
@@ -92,6 +119,14 @@ class Order extends Model
         return $query->where('status', $status);
     }
 
+    public function metodeSerahTerima(): ?string
+    {
+        return $this->metode_serah_terima ?? match (true) {
+            $this->diantar_pada !== null => 'antar',
+            $this->diambil_pada !== null => 'ambil',
+            default => null,
+        };
+    }
     // Helper
 
     public function sudahDiterima(): bool

@@ -1,0 +1,18 @@
+<script setup>
+import { useAttrs } from 'vue'
+import { cn } from '@/utils/cn'
+
+defineOptions({ inheritAttrs: false })
+
+const attrs = useAttrs()
+</script>
+
+<template>
+  <ul
+    data-slot="pagination-content"
+    v-bind="{ ...attrs, class: undefined }"
+    :class="cn('flex items-center gap-0.5', attrs.class)"
+  >
+    <slot />
+  </ul>
+</template>

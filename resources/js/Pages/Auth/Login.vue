@@ -17,7 +17,6 @@ defineProps({
 const form = useForm({
     email: '',
     password: '',
-    remember: false,
 });
 
 const submit = () => {
@@ -45,6 +44,8 @@ const submit = () => {
             </header>
 
             <BaseAlert v-if="status" variant="success">{{ status }}</BaseAlert>
+
+            <BaseAlert v-if="form.errors.firebase">{{ form.errors.firebase }}</BaseAlert>
 
             <BaseInput
                 v-model="form.email"

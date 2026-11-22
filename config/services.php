@@ -14,6 +14,10 @@ return [
     |
     */
 
+    'firebase' => [
+        'api_key' => env('FIREBASE_API_KEY') ?: env('VITE_FIREBASE_API_KEY'),
+    ],
+
     'postmark' => [
         'key' => env('POSTMARK_API_KEY'),
     ],

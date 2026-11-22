@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Str;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 
 class User extends Authenticatable Implements MustVerifyEmail
@@ -30,6 +31,7 @@ class User extends Authenticatable Implements MustVerifyEmail
     protected $hidden = [
         'password',
         'remember_token',
+        'firebase_uid',
     ];
 
     protected function casts(): array
@@ -45,6 +47,15 @@ class User extends Authenticatable Implements MustVerifyEmail
     public function customer(): HasOne
     {
         return $this->hasOne(Customer::class);
+    }
+
+    public function ensureCustomer(): Customer
+    {
+        return $this->customer()->firstOrCreate([], [
+            'kode_unik' => 'CST'.Str::upper(Str::random(9)),
+            'nama' => Str::limit($this->name, 100, ''),
+            'alamat' => $this->alamat,
+        ]);
     }
 
     public function ordersDibuat(): HasMany

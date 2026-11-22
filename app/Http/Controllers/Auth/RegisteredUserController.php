@@ -3,17 +3,17 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
-use App\Models\Customer;
 use App\Models\User;
-use Illuminate\Auth\Events\Registered;
-use Illuminate\Support\Facades\Auth;
+use App\Services\FirebaseIdentity;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rules;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use Kreait\Firebase\Exception\Auth\EmailExists;
+use Throwable;
 
 class RegisteredUserController extends Controller
 {
@@ -28,7 +28,7 @@ class RegisteredUserController extends Controller
     /**
      * Daftarkan pelanggan baru: buat akun (role pelanggan) sekaligus data customer-nya.
      */
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request, FirebaseIdentity $firebase): RedirectResponse
     {
         $data = $request->validate([
             'nama_lengkap' => ['required', 'string', 'max:100'],
@@ -59,44 +59,50 @@ class RegisteredUserController extends Controller
             'alamat' => 'Alamat',
         ]);
 
-        $user = DB::transaction(function () use ($data) {
-            $user = User::create([
-                'name' => $data['nama_lengkap'],
-                'username' => $data['username'],
+        try {
+            $record = $firebase->admin()->createUser([
                 'email' => $data['email'],
-                'password' => $data['password'], // di-hash otomatis oleh cast 'hashed'
-                'alamat' => $data['alamat'],
-                'role' => User::ROLE_PELANGGAN,
+                'password' => $data['password'],
+                'displayName' => $data['nama_lengkap'],
             ]);
+        } catch (EmailExists) {
+            throw ValidationException::withMessages(['email' => 'Email sudah dipakai. Coba masuk atau atur ulang password.']);
+        } catch (Throwable $error) {
+            throw $firebase->unavailable($error);
+        }
 
-            Customer::create([
-                'kode_unik' => $this->generateKodeUnik(),
-                'nama' => $data['nama_lengkap'],
-                'alamat' => $data['alamat'],
-                'user_id' => $user->id,
-            ]);
+        try {
+            DB::transaction(function () use ($data, $record): void {
+                $user = new User([
+                    'name' => $data['nama_lengkap'],
+                    'username' => $data['username'],
+                    'email' => $data['email'],
+                    'alamat' => $data['alamat'],
+                    'role' => User::ROLE_PELANGGAN,
+                ]);
+                $user->firebase_uid = $record->uid;
+                $user->save();
+                $user->ensureCustomer();
+            });
+        } catch (Throwable $error) {
+            try {
+                $firebase->admin()->deleteUser($record->uid);
+            } catch (Throwable $cleanupError) {
+                $firebase->unavailable($cleanupError);
+            }
 
-            return $user;
-        });
+            throw $error;
+        }
 
-        event(new Registered($user));
+        $status = 'Akun berhasil dibuat. Cek email verifikasi, lalu masuk ke WireShoes.';
 
-        // Sama seperti alur SPA: setelah daftar, arahkan ke halaman masuk dengan pesan sukses.
-        return redirect()
-            ->route('verification.notice')
-            ->route('login')
-            ->with('status', 'Akun berhasil dibuat. Masuk dengan email dan password barumu.');
-    }
+        try {
+            $firebase->admin()->sendEmailVerificationLink($data['email'], null, 'id');
+        } catch (Throwable $error) {
+            $firebase->unavailable($error);
+            $status = 'Akun berhasil dibuat. Setelah masuk, buka halaman verifikasi untuk meminta email verifikasi.';
+        }
 
-    /**
-     * Kode unik pelanggan 12 karakter (kolom customers.kode_unik, unik).
-     */
-    private function generateKodeUnik(): string
-    {
-        do {
-            $kode = 'CST' . strtoupper(Str::random(9));
-        } while (Customer::where('kode_unik', $kode)->exists());
-
-        return $kode;
+        return redirect()->route('login')->with('status', $status);
     }
 }

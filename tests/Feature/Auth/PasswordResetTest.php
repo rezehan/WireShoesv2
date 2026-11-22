@@ -2,10 +2,9 @@
 
 namespace Tests\Feature\Auth;
 
-use App\Models\User;
-use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Notification;
+use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class PasswordResetTest extends TestCase
@@ -14,60 +13,32 @@ class PasswordResetTest extends TestCase
 
     public function test_reset_password_link_screen_can_be_rendered(): void
     {
-        $response = $this->get('/forgot-password');
-
-        $response->assertStatus(200);
+        $this->withoutVite()->get('/forgot-password')->assertOk();
     }
 
-    public function test_reset_password_link_can_be_requested(): void
+    public function test_firebase_sends_password_reset_link(): void
     {
-        Notification::fake();
+        $email = 'pelanggan@example.com';
+        config(['services.firebase.api_key' => 'test-web-key']);
+        Http::fake(['identitytoolkit.googleapis.com/*' => Http::response([])]);
 
-        $user = User::factory()->create();
+        $this->from('/forgot-password')->post('/forgot-password', ['email' => $email])
+            ->assertRedirect('/forgot-password')->assertSessionHas('status');
 
-        $this->post('/forgot-password', ['email' => $user->email]);
-
-        Notification::assertSentTo($user, ResetPassword::class);
+        Http::assertSent(fn (Request $request) => $request['requestType'] === 'PASSWORD_RESET'
+            && $request['email'] === $email);
     }
 
-    public function test_reset_password_screen_can_be_rendered(): void
+    public function test_unknown_email_receives_same_response(): void
     {
-        Notification::fake();
+        $email = 'unknown@example.com';
+        config(['services.firebase.api_key' => 'test-web-key']);
+        Http::fake(['identitytoolkit.googleapis.com/*' => Http::response([
+            'error' => ['message' => 'EMAIL_NOT_FOUND'],
+        ], 400)]);
 
-        $user = User::factory()->create();
-
-        $this->post('/forgot-password', ['email' => $user->email]);
-
-        Notification::assertSentTo($user, ResetPassword::class, function ($notification) {
-            $response = $this->get('/reset-password/'.$notification->token);
-
-            $response->assertStatus(200);
-
-            return true;
-        });
-    }
-
-    public function test_password_can_be_reset_with_valid_token(): void
-    {
-        Notification::fake();
-
-        $user = User::factory()->create();
-
-        $this->post('/forgot-password', ['email' => $user->email]);
-
-        Notification::assertSentTo($user, ResetPassword::class, function ($notification) use ($user) {
-            $response = $this->post('/reset-password', [
-                'token' => $notification->token,
-                'email' => $user->email,
-                'password' => 'password',
-                'password_confirmation' => 'password',
-            ]);
-
-            $response
-                ->assertSessionHasNoErrors()
-                ->assertRedirect(route('login'));
-
-            return true;
-        });
+        $this->from('/forgot-password')->post('/forgot-password', ['email' => $email])
+            ->assertRedirect('/forgot-password')
+            ->assertSessionHas('status', 'Jika email terdaftar, Firebase akan mengirim tautan untuk mengatur ulang password.');
     }
 }

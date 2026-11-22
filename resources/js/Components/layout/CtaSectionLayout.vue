@@ -1,3 +1,15 @@
+<script setup>
+import { computed } from 'vue';
+import { Link, usePage } from '@inertiajs/vue3';
+
+const page = usePage();
+const user = computed(() => page.props.auth?.user);
+const actionRoute = computed(() => {
+    if (!user.value) return 'register';
+    return user.value.role === 'pelanggan' ? 'services.index' : 'dashboard';
+});
+</script>
+
 <template>
     <section id="cta" class="relative w-full overflow-hidden">
         <!-- Background (sama dengan section alur layanan, ganti kalau punya gambar lain) -->
@@ -16,10 +28,10 @@
                 Pesan layanan cuci dan perbaikan sepatu dengan mudah, lalu pantau statusnya kapan saja dalam satu
                 tempat.
             </p>
-            <RouterLink :to="{ name: 'daftar' }"
+            <Link :href="route(actionRoute)"
                 class="inline-block px-10 py-4 rounded-full bg-white text-red-700 font-poppins font-bold shadow-lg transition hover:-translate-y-1 hover:shadow-xl">
-                Daftar Sekarang
-            </RouterLink>
+                {{ user ? (user.role === 'pelanggan' ? 'Pesan layanan' : 'Buka dashboard') : 'Daftar Sekarang' }}
+            </Link>
         </div>
     </section>
 </template>

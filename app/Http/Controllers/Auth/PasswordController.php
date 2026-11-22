@@ -3,26 +3,29 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Services\FirebaseIdentity;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password;
+use Throwable;
 
 class PasswordController extends Controller
 {
-    /**
-     * Update the user's password.
-     */
-    public function update(Request $request): RedirectResponse
+    public function update(Request $request, FirebaseIdentity $firebase): RedirectResponse
     {
-        $validated = $request->validate([
-            'current_password' => ['required', 'current_password'],
-            'password' => ['required', Password::defaults(), 'confirmed'],
+        $data = $request->validate([
+            'current_password' => ['required', 'string', 'max:4096'],
+            'password' => ['required', 'string', 'max:72', 'confirmed', Password::min(8)],
         ]);
 
-        $request->user()->update([
-            'password' => Hash::make($validated['password']),
-        ]);
+        $user = $request->user();
+        $firebase->reauthenticate($user, $data['current_password']);
+
+        try {
+            $firebase->admin()->changeUserPassword($user->firebase_uid, $data['password']);
+        } catch (Throwable $error) {
+            throw $firebase->unavailable($error);
+        }
 
         return back();
     }

@@ -9,7 +9,9 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('orders', function (Blueprint $table) {
+        $sqlite = Schema::getConnection()->getDriverName() === 'sqlite';
+
+        Schema::create('orders', function (Blueprint $table) use ($sqlite) {
             $table->engine = 'InnoDB';
             $table->charset = 'utf8mb4';
             $table->collation = 'utf8mb4_unicode_ci';
@@ -50,11 +52,11 @@ return new class extends Migration
                 ->nullOnDelete();
 
             // Diisi backend ketika admin atau kasir menerima pesanan.
-            $table->char('kode_tracking', 8)
-                ->charset('ascii')
-                ->collation('ascii_bin')
-                ->nullable()
-                ->unique('uq_orders_kode_tracking');
+            $trackingCode = $table->char('kode_tracking', 8)->nullable()->unique('uq_orders_kode_tracking');
+
+            if (! $sqlite) {
+                $trackingCode->charset('ascii')->collation('ascii_bin');
+            }
 
             $table->dateTime('diterima_pada')->nullable();
 
@@ -79,6 +81,12 @@ return new class extends Migration
             $table->index(['status', 'sumber'], 'idx_orders_status');
         });
 
+        if ($sqlite) {
+            $this->addSqliteTrackingChecks();
+
+            return;
+        }
+
         // MySQL 8.0.16+. Kode terisi harus terdiri dari delapan angka.
         DB::statement(<<<'SQL'
             ALTER TABLE orders
@@ -95,6 +103,25 @@ return new class extends Migration
                 )
             )
             SQL);
+    }
+
+    private function addSqliteTrackingChecks(): void
+    {
+        foreach (['INSERT', 'UPDATE'] as $operation) {
+            DB::statement(<<<SQL
+                CREATE TRIGGER orders_check_tracking_{$operation}
+                BEFORE {$operation} ON orders
+                WHEN NEW.kode_tracking IS NOT NULL AND (
+                    NEW.sumber <> 'online'
+                    OR NEW.diterima_pada IS NULL
+                    OR length(NEW.kode_tracking) <> 8
+                    OR NEW.kode_tracking GLOB '*[^0-9]*'
+                )
+                BEGIN
+                    SELECT RAISE(ABORT, 'Kode tracking pesanan tidak valid');
+                END
+                SQL);
+        }
     }
 
     public function down(): void

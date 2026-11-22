@@ -41,6 +41,8 @@ const submit = () => {
 
             <BaseAlert v-if="status" variant="success">{{ status }}</BaseAlert>
 
+            <BaseAlert v-if="form.errors.firebase">{{ form.errors.firebase }}</BaseAlert>
+
             <BaseInput
                 v-model="form.email"
                 label="Email"

@@ -1,3 +1,15 @@
+<script setup>
+import { computed } from 'vue';
+import { Link, usePage } from '@inertiajs/vue3';
+
+const page = usePage();
+const user = computed(() => page.props.auth?.user);
+const actionRoute = computed(() => {
+    if (!user.value) return 'register';
+    return user.value.role === 'pelanggan' ? 'services.index' : 'dashboard';
+});
+</script>
+
 <template>
     <div
         class="hero-section container min-h-screen flex justify-center lg:justify-evenly items-center mx-auto px-6 py-12 lg:py-0">
@@ -18,14 +30,14 @@
                 manusia dengan teknologi.
             </p>
             <div class="flex flex-col sm:flex-row justify-center lg:justify-start gap-4">
-                <RouterLink :to="{ name: 'daftar' }"
+                <Link :href="route(actionRoute)"
                     class="w-full sm:w-auto px-9 py-3.5 text-white font-semibold text-center rounded-full bg-red-700 hover:bg-red-800 transition">
-                    Daftar & Pesan
-                </RouterLink>
-                <RouterLink :to="{ name: 'masuk' }"
+                    {{ user ? (user.role === 'pelanggan' ? 'Pesan layanan' : 'Buka dashboard') : 'Daftar & Pesan' }}
+                </Link>
+                <Link v-if="!user" :href="route('login')"
                     class="w-full sm:w-auto px-9 py-3.5 text-red-700 font-bold text-center rounded-full border-3 border-red-700 hover:bg-red-50 transition">
                     Sudah Punya Akun?
-                </RouterLink>
+                </Link>
             </div>
         </div>
 
@@ -38,7 +50,7 @@
             </span>
 
             <span
-                class="absolute z-0 bottom-[10%] left-5 px-4 py-3 rounded-lg animate-float-bounce bg-white border border-red-100 shadow-sm text-sm font-bold text-red-700 whitespace-nowrap">
+                class="absolute z-0 bottom-[10%] left-5 px-4 py-3 rounded-lg animate-bounce-float bg-white border border-red-100 shadow-sm text-sm font-bold text-red-700 whitespace-nowrap">
                 Harga Murah Meriah
             </span>
         </div>

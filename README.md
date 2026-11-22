@@ -1,58 +1,78 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# WireShoes dengan Firebase Authentication
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Laravel menerima form Inertia, mengirim kredensial ke Firebase untuk login, memvalidasi ID token yang diterima, lalu membuka sesi Laravel. Role `admin`, `kasir`, dan `pelanggan` berasal dari tabel `users`. Pendaftaran lewat situs selalu membuat role `pelanggan`.
 
-## About Laravel
+Pelanggan yang belum verifikasi tetap bisa masuk dan membuka beranda. Saat membuka layanan, Laravel mengarahkannya ke halaman verifikasi. Permintaan membuat pesanan juga diperiksa di server. Setelah membuka tautan dari Firebase, kembali ke WireShoes dan klik **Cek status verifikasi**. Status juga diperbarui saat login berikutnya.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Salin file
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+1. Ekstrak ZIP. Untuk setiap file di folder `copas/`, buka file tersebut dan salin seluruh isinya. Tempel ke path yang sama di proyek WireShoes. Contoh, salin `copas/routes/auth.php` ke `routes/auth.php`. Buat file atau folder tujuan jika belum ada.
+2. `copas/.env.example` adalah contoh konfigurasi. Tambahkan dua variabel Firebase di bawah ke `.env` yang sudah dipakai proyek. Pertahankan nilai `APP_KEY` dan pengaturan database yang sudah berfungsi.
+3. File di `copas/tests/` memperbarui pengujian bawaan. Salin file tersebut juga jika kamu menjalankan `php artisan test`.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## Siapkan Firebase
 
-## Learning Laravel
+Aktifkan provider **Email/Password** di Firebase Console pada menu **Authentication → Sign-in method**. Ambil `apiKey` dari konfigurasi aplikasi Web di **Project settings → General**. Service account JSON harus berasal dari proyek Firebase yang sama.
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+Arsip sumber berisi private key service account. Buat kunci pengganti, pasang kunci baru pada server, lalu cabut kunci lama di Google Cloud IAM. Simpan kunci baru di luar repositori. Jika file lama sudah di-track Git, setelah rotasi gunakan `git rm --cached -- <path-file-json>` untuk mengeluarkannya dari indeks Git. Untuk cara menangani kunci yang sudah dibagikan, lihat [panduan Google Cloud](https://docs.cloud.google.com/iam/docs/best-practices-for-managing-service-account-keys).
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+Isi `.env` di root proyek. Contoh path Windows menggunakan garis miring ke depan.
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
-
-```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+```dotenv
+FIREBASE_API_KEY=
+FIREBASE_CREDENTIALS="C:/path/ke/kunci-baru.json"
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+Verifikasi dan reset password membuka halaman tindakan email bawaan Firebase. Bila proyek Firebase memakai URL tindakan email khusus, pastikan URL tersebut menangani kode tindakan Firebase. Pengiriman ulang verifikasi memakai SDK di server.
 
-## Contributing
+## Jalankan proyek
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+Jalankan dari root proyek. Jika satu instalasi dependensi sudah lengkap, kamu bisa melewati perintah instalasinya.
 
-## Code of Conduct
+```sh
+composer install
+npm install
+php artisan optimize:clear
+php artisan migrate
+php artisan db:seed --class=WireShoesOrderStatusSeeder
+npm run build
+php artisan serve
+```
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+Jika proyek baru dan `APP_KEY` kosong, jalankan `php artisan key:generate` sebelum menjalankan server. Jika memakai SQLite baru, buat file SQLite kosong sebelum `migrate`, aktifkan ekstensi PHP `pdo_sqlite`, dan isi `DB_DATABASE` dengan path absolut. Untuk SQLite yang sudah berisi data, pakai path file database lama. Paket ini menyesuaikan migrasi awal tabel `orders` agar validasi kode pelacakan dapat dijalankan di SQLite.
 
-## Security Vulnerabilities
+Perintah seeder membuat status awal **Dipesan** jika tabel status masih kosong. Form pesanan menampilkan layanan aktif dari tabel `services` dan memakai harga yang tercatat di database. Jika tabelnya masih kosong, masukkan layanan beserta harga toko. Contoh melalui `php artisan tinker`, sesuaikan nama dan harga sebelum menjalankan.
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+```php
+App\Models\Service::firstOrCreate(
+    ['nama' => 'Cuci Sepatu'],
+    ['harga' => 25000, 'estimasi_hari' => 3, 'aktif' => true],
+);
+```
 
-## License
+## Hubungkan akun staf dan akun Laravel lama
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+Buat atau impor akun di **Firebase Authentication → Users** terlebih dahulu. Cocokkan email dan pastikan akun Firebase tersebut benar-benar milik orang yang akan diberi akses.
+
+Untuk admin atau kasir yang sudah ada di database Laravel, jalankan perintah berikut dengan email akun tersebut. Perintah mempertahankan ID dan role lokal. Cara ini juga berlaku untuk pelanggan lama.
+
+```sh
+php artisan firebase:link-user admin@example.com
+```
+
+Untuk menambahkan staf baru yang sudah ada di Firebase, gunakan `--role` dari terminal Laravel.
+
+```sh
+php artisan firebase:link-user admin-baru@example.com --role=admin --name="Admin Toko"
+php artisan firebase:link-user kasir-baru@example.com --role=kasir --name="Kasir Toko"
+```
+
+Akun lama memakai password Firebase setelah ditautkan. Jika akunnya dibuat baru di Firebase, pengguna dapat mengatur password sendiri lewat **Lupa password?**. Sesi dari login lokal lama meminta pengguna masuk kembali. Dashboard staf memakai pemeriksaan email terverifikasi yang sudah dipakai proyek.
+
+## Cek setelah konfigurasi
+
+1. Daftar sebagai pelanggan, masuk, lalu buka **Layanan** sebelum verifikasi. WireShoes mengarahkan ke verifikasi email.
+2. Klik tautan Firebase dari email, kembali ke WireShoes, lalu klik **Cek status verifikasi**. Kirim pesanan dan periksa bahwa nomor pesanan muncul.
+3. Masuk dengan akun kasir atau admin yang sudah ditautkan. Periksa bahwa dashboard terbuka dan role di database sesuai. Uji juga **Lupa password?** dengan akun percobaan.
+
+Build Vite dan pengujian Laravel memakai SQLite sudah lulus. Pengujian lokal memakai respons Firebase simulasi. Pengiriman email dan login ke proyek Firebase asli perlu diperiksa setelah kamu memasang konfigurasi baru.

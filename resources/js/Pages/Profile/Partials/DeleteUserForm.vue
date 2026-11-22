@@ -12,7 +12,7 @@ const confirmingUserDeletion = ref(false);
 const passwordInput = ref(null);
 
 const form = useForm({
-    password: '',
+    current_password: '',
 });
 
 const confirmUserDeletion = () => {
@@ -46,9 +46,7 @@ const closeModal = () => {
             </h2>
 
             <p class="mt-1 text-sm text-gray-600">
-                Once your account is deleted, all of its resources and data will
-                be permanently deleted. Before deleting your account, please
-                download any data or information that you wish to retain.
+                Akun login akan dihapus. Riwayat transaksi toko tetap tersimpan.
             </p>
         </header>
 
@@ -63,9 +61,7 @@ const closeModal = () => {
                 </h2>
 
                 <p class="mt-1 text-sm text-gray-600">
-                    Once your account is deleted, all of its resources and data
-                    will be permanently deleted. Please enter your password to
-                    confirm you would like to permanently delete your account.
+                    Masukkan password akunmu untuk mengonfirmasi penghapusan akun.
                 </p>
 
                 <div class="mt-6">
@@ -78,14 +74,14 @@ const closeModal = () => {
                     <TextInput
                         id="password"
                         ref="passwordInput"
-                        v-model="form.password"
+                        v-model="form.current_password"
                         type="password"
                         class="mt-1 block w-3/4"
                         placeholder="Password"
                         @keyup.enter="deleteUser"
                     />
 
-                    <InputError :message="form.errors.password" class="mt-2" />
+                    <InputError :message="form.errors.current_password || form.errors.firebase" class="mt-2" />
                 </div>
 
                 <div class="mt-6 flex justify-end">
