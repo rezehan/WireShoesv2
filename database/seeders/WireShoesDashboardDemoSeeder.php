@@ -71,13 +71,14 @@ class WireShoesDashboardDemoSeeder extends Seeder
                     }
 
                     $pesanan[$nomor] = $order;
+
                     continue;
                 }
 
                 $masuk = $tahap === 'dipesan' ? $now->subMinutes(40) : $now->subDays(6);
                 [$estimasiAntar, $aktualAntar] = $pengiriman[$nomor] ?? [null, null];
 
-                $order = new Order();
+                $order = new Order;
                 $order->forceFill([
                     'nomor_pesanan' => (string) $nomor,
                     'customer_id' => $pelanggan->id,

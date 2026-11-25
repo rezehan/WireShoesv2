@@ -5,10 +5,10 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Order extends Model
 {
@@ -16,7 +16,7 @@ class Order extends Model
     {
         for ($attempt = 0; $attempt < 5; $attempt++) {
             try {
-                return DB::transaction(fn() => $customer->orders()->create([
+                return DB::transaction(fn () => $customer->orders()->create([
                     ...$attributes,
                     'nomor_pesanan' => (string) random_int(10_000_000, 99_999_999),
                 ]));
@@ -36,14 +36,19 @@ class Order extends Model
             'service_id' => 'Nomor pesanan belum berhasil dibuat. Coba lagi.',
         ]);
     }
+
     protected $table = 'orders';
 
     public const SUMBER_TOKO = 'toko';
+
     public const SUMBER_ONLINE = 'online';
 
     public const STATUS_DIPESAN = 'dipesan';
+
     public const STATUS_DIPROSES = 'diproses';
+
     public const STATUS_SELESAI = 'selesai';
+
     public const STATUS_DIBATALKAN = 'dibatalkan';
 
     protected $fillable = [

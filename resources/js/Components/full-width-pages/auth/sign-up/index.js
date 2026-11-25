@@ -1,5 +1,0 @@
-export { default, default as SignUp } from './SignUp.vue'
-export { default as SignUpHeader } from './Header.vue'
-export { default as SignUpFormFields } from './Form.vue'
-export { default as SocialButtons } from './SocialButton.vue'
-export * from './types.js'

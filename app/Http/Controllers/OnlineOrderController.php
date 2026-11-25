@@ -6,7 +6,6 @@ use App\Models\Customer;
 use App\Models\Order;
 use App\Models\Service;
 use App\Models\WorkStatus;
-use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -31,7 +30,7 @@ class OnlineOrderController extends Controller
 
         return Inertia::render('LayananView', [
             'hargaLayanan' => collect(self::LAYANAN)->map(
-                fn(array $pilihan) => max(
+                fn (array $pilihan) => max(
                     (float) $hargaTersimpan->get($pilihan['nama'], 0),
                     $pilihan['harga'],
                 ),
@@ -117,30 +116,5 @@ class OnlineOrderController extends Controller
         }, attempts: 3);
 
         return redirect()->route('services.index')->with('order_number', $order->nomor_pesanan);
-    }
-
-    private function buatPesananDenganNomorUnik(Customer $customer, array $attributes): Order
-    {
-        for ($attempt = 0; $attempt < 5; $attempt++) {
-            try {
-                return $customer->orders()->create([
-                    ...$attributes,
-                    'nomor_pesanan' => (string) random_int(10_000_000, 99_999_999),
-                ]);
-            } catch (UniqueConstraintViolationException $error) {
-                $detail = (string) ($error->errorInfo[2] ?? '');
-
-                if (
-                    ! str_contains($detail, 'uq_orders_nomor_pesanan')
-                    && ! str_contains($detail, 'orders.nomor_pesanan')
-                ) {
-                    throw $error;
-                }
-            }
-        }
-
-        throw ValidationException::withMessages([
-            'service_id' => 'Kode pesanan belum berhasil dibuat. Coba lagi.',
-        ]);
     }
 }

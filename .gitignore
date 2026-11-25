@@ -25,3 +25,7 @@ _ide_helper.php
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Arsip proyek (jangan di-commit, bisa berisi .env/kredensial)
+*.tar.gz
+*.zip

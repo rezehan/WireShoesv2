@@ -1,10 +1,9 @@
 <?php
 
+use App\Http\Controllers\CustomerOrderController;
 use App\Http\Controllers\OnlineOrderController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\StaffDashboardController;
-use App\Http\Controllers\CustomerOrderController;
-use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -12,8 +11,6 @@ Route::get('/', function () {
     return Inertia::render('BerandaView', [
         'canLogin' => Route::has('login'),
         'canRegister' => Route::has('register'),
-        'laravelVersion' => Application::VERSION,
-        'phpVersion' => PHP_VERSION,
     ]);
 });
 

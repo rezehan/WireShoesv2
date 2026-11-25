@@ -2,21 +2,22 @@
 
 namespace App\Models;
 
+use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Str;
-use Illuminate\Contracts\Auth\MustVerifyEmail;
 
-class User extends Authenticatable Implements MustVerifyEmail
+class User extends Authenticatable implements MustVerifyEmail
 {
     use HasFactory, Notifiable;
-    
 
     public const ROLE_ADMIN = 'admin';
+
     public const ROLE_KASIR = 'kasir';
+
     public const ROLE_PELANGGAN = 'pelanggan';
 
     protected $fillable = [

@@ -12,8 +12,6 @@ import FooterLayout from '@/Components/layout/FooterLayout.vue'
 defineProps({
     canLogin: { type: Boolean },
     canRegister: { type: Boolean },
-    laravelVersion: { type: String },
-    phpVersion: { type: String },
 })
 </script>
 

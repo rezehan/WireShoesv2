@@ -23,6 +23,7 @@ class Service extends Model
     {
         return max((float) $this->harga, self::tarifDasar($this->nama));
     }
+
     protected $table = 'services';
 
     protected $fillable = [
